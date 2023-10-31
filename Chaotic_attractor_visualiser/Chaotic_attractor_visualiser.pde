@@ -22,12 +22,15 @@ float lerpXCoord = 0;
 float lerpYCoord = 0;
 
 //Sounds
+Amplitude amp;
+int ampOffset = 100000;
 SoundFile file;
 String[] soundList;
 float volume = 0.1;
 
 //Attractor
-String attractor;
+String[] attractors = {"aizawa", "halvorsen", "fourwing", "rabFabrikant", "thomas"};
+float z;
 float a, b, c, d, e, f;
 float attrXNext, attrYNext, attrZNext;
 
@@ -36,6 +39,7 @@ ControlP5 ui;
 
 //Log
 boolean firstPassDone = false;
+
 
 void setup(){
   
@@ -47,11 +51,10 @@ void setup(){
     uiInit();
   }
   catch (Exception ex){
-    println("Error: Project crashed.\n" + ex.toString() + "\n");
+    println("Fatal: Project crashed.\n" + ex.toString() + "\n");
   }
 }
 
-//draw tick
 void draw(){
   
   //load video pixels
@@ -74,7 +77,7 @@ void draw(){
         int store = x + y*videoCapture.width;
                 
         //do pixel manipulation if pixel store presents
-        if (store != 0) {           
+        if (store != 0){           
           //get current colour from a video capture
           color currColour = videoCapture.pixels[store];     
           float red1 = red(currColour);
@@ -89,29 +92,53 @@ void draw(){
                  
           float eucDist = dist(red1, green1, blue1, red2, green2, blue2);
           
-          if (eucDist > sqrt(threshold)) {
+          if (eucDist > sqrt(threshold)){
             
-              averageX += x;
-              averageY += y;
-              count++;
-              pixels[store] = color(255-invert, 255-invert, 255-invert);
+            averageX += x;
+            averageY += y;
+            count++;
+            
+            //checking amplitude and changing colour according to frequency
+            if (amp.analyze()*ampOffset > 200)
+            {              
+              pixels[store] = color(abs(255-invert), abs(255-invert), abs(255-invert)); //white
+            } 
+            else if (amp.analyze()*ampOffset > 150 && amp.analyze()*ampOffset < 200)
+            {              
+              pixels[store] = color(abs(255-invert), abs(215-invert), abs(150-invert)); //pale gold
+            } 
+            else if (amp.analyze()*ampOffset > 100 && amp.analyze()*ampOffset < 150)
+            {
+               pixels[store] = color(abs(255-invert), abs(215-invert), abs(100-invert)); //gold
+            }  
+            else if (amp.analyze()*ampOffset > 50 && amp.analyze()*ampOffset < 100)
+            {
+               pixels[store] = color(abs(255-invert), abs(165-invert), abs(0-invert)); //orange
+            }  
+            else 
+            {
+              pixels[store] = color(abs(100-invert), abs(70-invert), abs(10-invert)); //golden brown
+            }
           }
-          else {      
+          else 
+          {      
             pixels[store] = color(invert, invert, invert);
           }
         }
-        else {
+        else 
+        {
           //log message is output only once
           if (!firstPassDone){
-            print("Error: Pixel store is null.\n");
+            print("Error: No loaded pixels.\n");
             firstPassDone = true;
           }
         }
       }
     }
-    
+     
     updatePixels();
-    
+    rasterize();
+
     //only found if threshold is less than 10
     if (count > 200) { 
       
@@ -122,12 +149,15 @@ void draw(){
   lerpXCoord = lerp(lerpXCoord, motionXCoord, 0.1);
   lerpYCoord = lerp(lerpYCoord, motionYCoord, 0.1);
   
-  fill(255, 0, 255);
-  strokeWeight(2.0);
-  stroke(0);
+  //fill(255, 0, 255);
+  //strokeWeight(2.0);
+  //stroke(255,0,0);
   
-  //here should be switch-case of attractors
-  ellipse(lerpXCoord, lerpYCoord, 36, 36);
+  //here should be switch-case of attractors 
+
+   
+  //cal(lerpXCoord, lerpYCoord);     
+   ellipse(lerpXCoord, lerpYCoord, 36, 36);
 }
 
 //squre root of euclidean distance
@@ -143,7 +173,6 @@ void captureEvent(Capture videoCapture){
   prevFrame.updatePixels();
   videoCapture.read();
 }
-
 
 void camInit(){
   cameras = Capture.list();
@@ -162,39 +191,80 @@ void camInit(){
   } 
 }
 
-void soundInit(){
-  
+void soundInit(){ 
   //Sound init
   //Getting filenames from path
   String path = "../resonance";
   File folder = new File(dataPath(path));
   String[] soundList = folder.list();
+   
+  //Sound input stream 
+  amp = new Amplitude(this);
+  AudioIn in = new AudioIn(this, 0);
+  in.start();
+  amp.input(in);
   
-  for (int i = 0; i < soundList.length; i++) {
-    println(soundList[i] + "\t");
-  }
   file = new SoundFile(this, path + "/" + soundList[int(random(0, soundList.length))]);
-  if (file != null){        
+  if (file != null){     
     file.play();
-    file.loop();
+    file.loop();    
+    
+    println("Info: Loading playlist...\n");
+    for (int i = 0; i < soundList.length; i++) {
+      print(soundList[i] + "\t");
+    }
   }
   else {    
     print("Info: Music file(s) not found.\nPlease make sure some files are present at dir: " + path);
   }
 }
 
-void uiInit(){
+void attrInit(){
+
+}
+void uiInit(){  
   ui = new ControlP5(this); 
-  ui.addSlider("threshold", 0, 200, 10, 10, 100, 10);
-  ui.addSlider("invert", 0, 255, 10, 25, 100, 10);
-  ui.addSlider("volume", 0, 0.5, 10, 40, 100, 10);
-  ui.addMultiList("attractorChoice", 0, 100, 100, 10);
+  
+  color backCol = color(255, 128); //
+  color actCol = color(255, 165, 0); 
+  color foreCol = color(255, 100, 0);
+  
   ui.addFrameRate().setInterval(10).setPosition(videoCapture.width - 20, 0);
+  ui.addSlider("threshold", 0, 200, 10, 10, 100, 10)
+    .setColorBackground(backCol)
+    .setColorActive(actCol)
+    .setColorForeground(foreCol);
+    
+  ui.addSlider("invert", 0, 255, 10, 25, 100, 10)
+    .setColorBackground(backCol)
+    .setColorActive(actCol)
+    .setColorForeground(foreCol);
+    
+  ui.addSlider("volume", 0, 0.5, 10, 40, 100, 10)
+    .setColorBackground(backCol)
+    .setColorActive(actCol)
+    .setColorForeground(foreCol);
+  
+  if (attractors != null && attractors.length > 0) {
+    ListBox lb = ui.addListBox("attractors", 10, 55, 100, 10)
+       .setColorBackground(backCol)
+       .setColorActive(actCol)
+       .setColorForeground(foreCol);
+       
+    for (int i = 0; i < attractors.length; i++){
+      lb.addItem("item " + i, i);
+      //lb.addItem("test", 1);
+    }
+  }
+  else
+  {
+    print("Info: Cannot load the attractor list. Make sure to initialise attractor list before uiInit().");
+  }
 }  
 
 
 void drawAttractor(String attractor){
-  switch(attractor){
+  /*switch(attractor){
     case "aizawa":
       a = 0.95; b = 0.7; c = 0.6;
       d = 3.5; e = 0.25; f = 0.1;
@@ -228,21 +298,48 @@ void drawAttractor(String attractor){
       break;
     default:
       break;   
-   }
+   }*/
 }
 
 //https://www.youtube.com/watch?v=WEBOTRboXBE&t=994s&ab_channel=timrodenbr%C3%B6kercreativecoding
-void rasterise() {
+void rasterize() {
   
-  fill(0);
-  noStroke();
-  float tiles = 80;
+  float tiles = 60;
   float tileSize = width/tiles;
+  noStroke();
   
-  for (int x=0; x<tiles; x++) {
-    for(int y=0; y<tiles; y++) {
-      
-      ellipse(x * tileSize, y * tileSize, 10, 10);
+  //checking amplitude and changing colour according to frequency
+  if (amp.analyze()*ampOffset > 250 && amp.analyze()*ampOffset < 300)
+  {
+    fill(250-invert); //white
+  } 
+  if (amp.analyze()*ampOffset > 250 && amp.analyze()*ampOffset < 300)
+  {
+    fill(abs(230-invert), abs(190-invert), abs(138-invert)); //pale gold
+  } 
+  else if (amp.analyze()*ampOffset > 200 && amp.analyze()*ampOffset < 250)
+  {
+    fill(abs(255-invert), abs(215-invert), abs(32-invert)); //gold
+  } 
+  else if (amp.analyze()*ampOffset > 175 && amp.analyze()*ampOffset < 200)
+  {
+    fill(abs(0-invert), abs(183-invert), abs(235-invert)); //cyan
+  }
+  else if (amp.analyze()*ampOffset > 125 && amp.analyze()*ampOffset < 150)
+  {
+    fill(abs(220-invert), abs(20-invert), abs(60-invert)); //crimson
+  }
+  else if (amp.analyze()*ampOffset < 100)
+  {
+    fill(abs(20-invert)); //black
+  }
+  
+  //harftone filter
+  for (int x = 0; x < tiles; x++) {
+    for(int y = 0; y < tiles; y++) {    
+      color c = prevFrame.get(int(x*tileSize), int(y*tileSize));
+      float b = map(brightness(c), 0, 255, 0, 0);    
+      ellipse(x*tileSize, y*tileSize, 2, 2);
     }
   }
 }
